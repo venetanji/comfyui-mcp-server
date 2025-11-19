@@ -6,6 +6,7 @@ from contextlib import asynccontextmanager
 import websockets
 from mcp.server.fastmcp import FastMCP
 from comfyui_client import ComfyUIClient
+from pydantic import BaseModel
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -32,22 +33,26 @@ async def app_lifespan(server: FastMCP) -> AsyncIterator[AppContext]:
         # Shutdown: Cleanup (if needed)
         logger.info("Shutting down MCP server")
 
+available_models = comfyui_client._get_available_models()
 # Initialize FastMCP with lifespan
 mcp = FastMCP("ComfyUI_MCP_Server", lifespan=app_lifespan)
 
 # Define the image generation tool
-@mcp.tool()
-def generate_image(params: str) -> dict:
+@mcp.tool(
+    name="generate_image",
+    description="Generate an image based on a text prompt using ComfyUI",
+)
+def generate_image(
+    prompt: str,
+    width: int = 512,
+    height: int = 512,
+    workflow_id: str = "basic_api_test",
+    model: str = available_models[0]  # Default to the first available model
+):
     """Generate an image using ComfyUI"""
-    logger.info(f"Received request with params: {params}")
-    try:
-        param_dict = json.loads(params)
-        prompt = param_dict["prompt"]
-        width = param_dict.get("width", 512)
-        height = param_dict.get("height", 512)
-        workflow_id = param_dict.get("workflow_id", "basic_api_test")
-        model = param_dict.get("model", None)
 
+    try:
+        
         # Use global comfyui_client (since mcp.context isn’t available)
         image_url = comfyui_client.generate_image(
             prompt=prompt,
@@ -62,26 +67,5 @@ def generate_image(params: str) -> dict:
         logger.error(f"Error: {e}")
         return {"error": str(e)}
 
-# WebSocket server
-async def handle_websocket(websocket, path):
-    logger.info("WebSocket client connected")
-    try:
-        async for message in websocket:
-            request = json.loads(message)
-            logger.info(f"Received message: {request}")
-            if request.get("tool") == "generate_image":
-                result = generate_image(request.get("params", ""))
-                await websocket.send(json.dumps(result))
-            else:
-                await websocket.send(json.dumps({"error": "Unknown tool"}))
-    except websockets.ConnectionClosed:
-        logger.info("WebSocket client disconnected")
-
-# Main server loop
-async def main():
-    logger.info("Starting MCP server on ws://localhost:9000...")
-    async with websockets.serve(handle_websocket, "localhost", 9000):
-        await asyncio.Future()  # Run forever
-
 if __name__ == "__main__":
-    asyncio.run(main())
+    mcp.run(transport="streamable-http")
