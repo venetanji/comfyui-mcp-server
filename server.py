@@ -69,32 +69,18 @@ class WorkflowToolDefinition:
 
 
 class WorkflowManager:
-    def __init__(self, workflows_dirs: Sequence[Path] | Path):
-        # Accept either a single Path or a sequence of Paths
-        if isinstance(workflows_dirs, Path):
-            self.workflows_dirs = [workflows_dirs]
-        else:
-            self.workflows_dirs = list(workflows_dirs)
+    def __init__(self, workflows_dir: Path):
+        self.workflows_dir = workflows_dir
         self._tool_names: set[str] = set()
         self.tool_definitions = self._load_workflows()
 
     def _load_workflows(self):
         definitions: list[WorkflowToolDefinition] = []
-        # Iterate through configured workflow directories in order
-        any_exists = False
-        for workflows_dir in self.workflows_dirs:
-            if workflows_dir.exists():
-                any_exists = True
-                break
-        if not any_exists:
-            logger.info("No workflow directories exist yet: %s", self.workflows_dirs)
+        if not self.workflows_dir.exists():
+            logger.info("Workflow directory %s does not exist yet", self.workflows_dir)
             return definitions
 
-        for workflows_dir in self.workflows_dirs:
-            if not workflows_dir.exists():
-                logger.info("Skipping missing workflow directory: %s", workflows_dir)
-                continue
-            for workflow_path in sorted(workflows_dir.glob("*.json")):
+        for workflow_path in sorted(self.workflows_dir.glob("*.json")):
             try:
                 with open(workflow_path, "r", encoding="utf-8") as handle:
                     workflow = json.load(handle)
@@ -261,9 +247,7 @@ class WorkflowManager:
 
 # Global ComfyUI client (fallback since context isn’t available)
 comfyui_client = ComfyUIClient(DEFAULT_COMFY_URL)
-# Workflow manager will be initialized at runtime in main() so we can
-# accept additional workflow directories from CLI args.
-workflow_manager: Optional[WorkflowManager] = None
+workflow_manager = WorkflowManager(WORKFLOW_DIR)
 
 # Define application context (for future use)
 class AppContext:
@@ -473,8 +457,15 @@ def _register_workflow_tool(definition: WorkflowToolDefinition):
     )
 
 
-# Workflow tool registration is deferred until runtime when we know
-# which workflow directories to load (see main()).
+if workflow_manager.tool_definitions:
+    for tool_definition in workflow_manager.tool_definitions:
+        _register_workflow_tool(tool_definition)
+else:
+    logger.info(
+        "No workflow placeholders found in %s; add %s markers to enable auto tools",
+        WORKFLOW_DIR,
+        PLACEHOLDER_PREFIX,
+    )
 
 
 def main():
@@ -502,13 +493,6 @@ def main():
         default=None,
         help="Folder to save generated files. If not specified, files will not be saved locally.",
     )
-    parser.add_argument(
-        "--workflow-folder",
-        "-w",
-        action="append",
-        default=None,
-        help="Additional workflow folder(s) to load JSON workflows from. Can be passed multiple times.",
-    )
     args = parser.parse_args()
 
     global comfyui_client, OUTPUT_FOLDER
@@ -525,22 +509,6 @@ def main():
     if args.output_folder:
         OUTPUT_FOLDER = Path(args.output_folder)
         logger.info("Saving generated files to: %s", OUTPUT_FOLDER)
-
-    # Initialize workflow manager with default workflows dir plus any additional folders
-    global workflow_manager
-    extra_dirs = [Path(p) for p in (args.workflow_folder or [])]
-    combined_dirs = [WORKFLOW_DIR] + extra_dirs
-    workflow_manager = WorkflowManager(combined_dirs)
-    # Register any discovered workflow tools
-    if workflow_manager.tool_definitions:
-        for tool_definition in workflow_manager.tool_definitions:
-            _register_workflow_tool(tool_definition)
-    else:
-        logger.info(
-            "No workflow placeholders found in %s; add %s markers to enable auto tools",
-            combined_dirs,
-            PLACEHOLDER_PREFIX,
-        )
 
     mcp.run(transport=args.transport)
 
