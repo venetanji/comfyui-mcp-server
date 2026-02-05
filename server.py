@@ -95,12 +95,12 @@ class WorkflowManager:
                 logger.info("Skipping missing workflow directory: %s", workflows_dir)
                 continue
             for workflow_path in sorted(workflows_dir.glob("*.json")):
-            try:
-                with open(workflow_path, "r", encoding="utf-8") as handle:
-                    workflow = json.load(handle)
-            except json.JSONDecodeError as exc:
-                logger.error("Skipping workflow %s due to JSON error: %s", workflow_path.name, exc)
-                continue
+                try:
+                    with open(workflow_path, "r", encoding="utf-8") as handle:
+                        workflow = json.load(handle)
+                except json.JSONDecodeError as exc:
+                    logger.error("Skipping workflow %s due to JSON error: %s", workflow_path.name, exc)
+                    continue
 
             parameters = self._extract_parameters(workflow)
             if not parameters:
