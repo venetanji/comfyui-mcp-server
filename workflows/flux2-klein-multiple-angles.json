@@ -4,9 +4,9 @@
       "image": "PARAM_IMAGE_FILENAME",
       "refresh": "refresh"
     },
-    "class_type": "LoadImageOutput",
+    "class_type": "LoadImage",
     "_meta": {
-      "title": "Load Image (from Outputs)"
+      "title": "Load Image"
     }
   },
   "94": {
