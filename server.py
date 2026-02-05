@@ -370,61 +370,65 @@ def _register_workflow_tool(definition: WorkflowToolDefinition):
                 workflow,
                 preferred_output_keys=definition.output_preferences,
             )
-            asset = result.get("asset")
-            if not asset:
+            # Support multiple assets returned by ComfyUI (some workflows produce several images)
+            assets = []
+            if isinstance(result.get("assets"), list):
+                assets = result.get("assets")
+            elif isinstance(result.get("asset"), dict):
+                assets = [result.get("asset")]
+            else:
+                # Fallback: try to construct a single-asset view from common keys
+                possible_filename = result.get("filename") or (result.get("asset") or {}).get("filename")
+                possible_url = result.get("asset_url") or (result.get("asset") or {}).get("asset_url") or result.get("url")
+                if possible_filename or possible_url:
+                    assets = [{"filename": possible_filename or "", "asset_url": possible_url or ""}]
+
+            if not assets:
                 return {"error": "No asset returned by ComfyUI."}
-            filename = asset.get("filename", "")
-            asset_url = result.get("asset_url", "")
-            mime_type = comfyui_client.guess_mime_type(filename)
-            kind = "image" if mime_type.startswith("image/") else "audio"
-            
-            # Save file if output folder is configured
-            saved_path = None
-            if OUTPUT_FOLDER:
-                try:
-                    saved_path = _save_file_from_url(asset_url, filename, OUTPUT_FOLDER)
-                except Exception as save_exc:
-                    logger.warning(f"Failed to save file: {save_exc}")
-            
-            # Build response content
-            content = []
-            if saved_path:
-                message = f"Workflow completed successfully.\nGenerated {kind}: {filename}\nSaved to: {saved_path}"
-                content.append({"type": "text", "text": message})
-                
-                # Add image/audio data if file was saved locally
-                # Add small delay to ensure file system has fully committed the write
-                try:
-                    time.sleep(0.1)  # 100ms delay to prevent race condition
-                    with open(saved_path, "rb") as f:
-                        file_data = base64.b64encode(f.read()).decode("utf-8")
-                    content.append({
-                        "type": kind,
-                        "data": file_data,
-                        "mimeType": mime_type,
-                    })
-                except Exception as read_exc:
-                    logger.warning(f"Failed to read saved file for embedding: {read_exc}")
-            else:
-                markdown_hint = f"![Image]({asset_url})" if kind == "image" else f"[Audio]({asset_url})"
-                message = f"Workflow completed successfully.\nGenerated {kind}: {filename}\nAsset URL: {asset_url}\n\nTo display, use: {markdown_hint}"
-                content.append({"type": "text", "text": message})
-            
-            # Keep structuredContent minimal to avoid stack overflow
-            structured = {
-                "filename": filename,
-                "mimeType": mime_type,
-                "type": kind,
-            }
-            if saved_path:
-                structured["savedPath"] = saved_path
-            else:
-                structured["assetUrl"] = asset_url
-            
-            return CallToolResult(
-                content=content,
-                structuredContent=structured
-            )
+
+            content: list[Dict[str, Any]] = []
+            structured_assets: list[Dict[str, Any]] = []
+
+            for idx, asset in enumerate(assets):
+                if not isinstance(asset, dict):
+                    logger.warning("Skipping unexpected asset format: %s", asset)
+                    continue
+                filename = asset.get("filename", "")
+                # asset may contain a per-asset URL key or the top-level result may have it
+                asset_url = asset.get("asset_url") or asset.get("url") or result.get("asset_url") or result.get("url") or ""
+                mime_type = comfyui_client.guess_mime_type(filename)
+                kind = "image" if mime_type.startswith("image/") else "audio"
+
+                saved_path = None
+                if OUTPUT_FOLDER and asset_url and filename:
+                    try:
+                        saved_path = _save_file_from_url(asset_url, filename, OUTPUT_FOLDER)
+                    except Exception as save_exc:
+                        logger.warning(f"Failed to save file '%s': %s", filename, save_exc)
+
+                if saved_path:
+                    message = f"Workflow completed successfully.\nGenerated {kind}: {filename}\nSaved to: {saved_path}"
+                    content.append({"type": "text", "text": message})
+                    try:
+                        time.sleep(0.05)
+                        with open(saved_path, "rb") as f:
+                            file_data = base64.b64encode(f.read()).decode("utf-8")
+                        content.append({"type": kind, "data": file_data, "mimeType": mime_type})
+                    except Exception as read_exc:
+                        logger.warning(f"Failed to read saved file for embedding: {read_exc}")
+                else:
+                    markdown_hint = f"![Image]({asset_url})" if kind == "image" else f"[Audio]({asset_url})"
+                    message = f"Workflow completed successfully.\nGenerated {kind}: {filename}\nAsset URL: {asset_url}\n\nTo display, use: {markdown_hint}"
+                    content.append({"type": "text", "text": message})
+
+                entry = {"filename": filename, "mimeType": mime_type, "type": kind}
+                if saved_path:
+                    entry["savedPath"] = saved_path
+                else:
+                    entry["assetUrl"] = asset_url
+                structured_assets.append(entry)
+
+            return CallToolResult(content=content, structuredContent={"assets": structured_assets})
         except Exception as exc:
             logger.exception("Workflow '%s' failed", definition.workflow_id)
             error_payload = {
