@@ -110,7 +110,7 @@ Example launch config style:
     "comfyui-mcp-server"
   ],
   "env": {
-    "COMFY_URL": "http://thor:8188"
+    "COMFY_URL": "http://localhost:8188"
   }
 
 ### Workflow-backed MCP tools

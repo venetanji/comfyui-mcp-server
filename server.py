@@ -42,7 +42,7 @@ PLACEHOLDER_DESCRIPTIONS = {
 DEFAULT_OUTPUT_KEYS = ("images", "image", "gifs", "gif", "files")
 AUDIO_OUTPUT_KEYS = ("audio", "audios", "sound", "files")
 WORKFLOW_DIR = Path(__file__).parent / "workflows"
-DEFAULT_COMFY_URL = os.getenv("COMFY_URL", "http://thor:8188")
+DEFAULT_COMFY_URL = os.getenv("COMFY_URL", "http://localhost:8188")
 DEFAULT_PORT = int(os.getenv("MCP_PORT", "9000"))
 OUTPUT_FOLDER: Optional[Path] = None
 
