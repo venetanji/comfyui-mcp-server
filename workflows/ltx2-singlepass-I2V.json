@@ -12,7 +12,7 @@
   },
   "10": {
     "inputs": {
-      "text": "The person is baffled and looks very confused. then has a realization! She says \"I finally figured out how to make image to video!\"",
+      "text": "PARAM_PROMPT",
       "clip": [
         "12",
         0
