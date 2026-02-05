@@ -1,0 +1,33 @@
+[build-system]
+requires = ["hatchling>=1.24.0"]
+build-backend = "hatchling.build"
+
+[project]
+name = "comfyui-mcp-server"
+version = "0.1.0"
+description = "ComfyUI MCP server for workflow-driven generation."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { file = "LICENSE" }
+authors = [
+  { name = "joenorton" }
+]
+dependencies = [
+  "mcp",
+  "fastmcp",
+  "requests",
+  "websockets"
+]
+
+[project.scripts]
+comfyui-mcp-server = "server:main"
+
+[tool.hatch.build.targets.wheel]
+include = [
+  "server.py",
+  "comfyui_client.py",
+  "client.py",
+  "workflows/*.json",
+  "README.md",
+  "LICENSE"
+]

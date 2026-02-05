@@ -13,7 +13,7 @@ This project enables AI agents to send generation requests to ComfyUI using the 
 
 - **Python 3.10+**
 - **ComfyUI**: Installed and running locally (e.g., on `localhost:8188`).
-- **Dependencies**: `requests`, `websockets`, `mcp` (install via pip).
+- **Dependencies**: `requests`, `websockets`, `mcp` (install via pip or uv).
 
 ## Setup
 
@@ -23,7 +23,11 @@ This project enables AI agents to send generation requests to ComfyUI using the 
 
 2. **Install Dependencies**:
 
-   pip install requests websockets mcp
+  pip install requests websockets mcp
+
+  or with uv:
+
+  uv pip install requests websockets mcp
 
 
 3. **Start ComfyUI**:
@@ -41,7 +45,11 @@ This project enables AI agents to send generation requests to ComfyUI using the 
 ## Usage
 
 1. **Run the MCP Server**:
-   python server.py
+  python server.py --comfy-url http://thor:8188
+
+  or set the environment variable:
+
+  COMFY_URL=http://thor:8188 python server.py
 
 - Listens on `ws://localhost:9000`.
 
@@ -73,8 +81,31 @@ This project enables AI agents to send generation requests to ComfyUI using the 
 
 - `generate_image.json`: Minimal Stable Diffusion 1.5 image sampler that exposes `prompt`, `width`, `height`, and `model` parameters. Produces PNG URLs.
 - `generate_song.json`: AceStep audio text-to-song workflow that exposes `tags` and `lyrics` parameters and returns an MP3 URL.
+- `flux2-klein-1-image-edit.json`: Image edit workflow that exposes `prompt`, `width`, `height`, and `image_filename` parameters.
 
 Add additional API-format workflows following the placeholder convention below to expose new MCP tools automatically.
+
+### Running with uvx
+
+You can run the server directly from git with uvx:
+
+  uvx --from git+https://github.com/venetanji/comfyui-mcp-server@main comfyui-mcp-server
+
+Set the ComfyUI URL via environment variable (recommended):
+
+  COMFY_URL=http://thor:8188 uvx --from git+https://github.com/venetanji/comfyui-mcp-server@main comfyui-mcp-server
+
+Example launch config style:
+
+  "command": "uvx",
+  "args": [
+    "--from",
+    "git+https://github.com/venetanji/comfyui-mcp-server@main",
+    "comfyui-mcp-server"
+  ],
+  "env": {
+    "COMFY_URL": "http://thor:8188"
+  }
 
 ### Workflow-backed MCP tools
 
