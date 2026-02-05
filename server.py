@@ -482,6 +482,12 @@ def main():
         help="Port for the MCP server (or set MCP_PORT).",
     )
     parser.add_argument(
+        "--transport",
+        choices=("stdio", "streamable-http"),
+        default=os.getenv("MCP_TRANSPORT", "stdio"),
+        help="MCP transport to use. Defaults to stdio for uvx/stdio MCP clients. Set MCP_TRANSPORT=streamable-http or pass --transport streamable-http to run the HTTP server.",
+    )
+    parser.add_argument(
         "--output-folder",
         type=str,
         default=None,
@@ -494,15 +500,17 @@ def main():
         logger.info("Using ComfyUI URL: %s", args.comfy_url)
         comfyui_client = ComfyUIClient(args.comfy_url)
 
-    if args.port != mcp.settings.port:
-        logger.info("Using MCP server port: %s", args.port)
-        mcp.settings.port = args.port
+    # Only applies to HTTP transport.
+    if args.transport == "streamable-http":
+        if args.port != mcp.settings.port:
+            logger.info("Using MCP server port: %s", args.port)
+            mcp.settings.port = args.port
     
     if args.output_folder:
         OUTPUT_FOLDER = Path(args.output_folder)
         logger.info("Saving generated files to: %s", OUTPUT_FOLDER)
 
-    mcp.run(transport="streamable-http")
+    mcp.run(transport=args.transport)
 
 
 

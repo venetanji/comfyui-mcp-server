@@ -51,7 +51,9 @@ This project enables AI agents to send generation requests to ComfyUI using the 
 
   COMFY_URL=http://thor:8188 python server.py
 
-- Listens on `ws://localhost:9000`.
+- By default, the server uses **stdio transport**. This is the recommended mode for MCP clients launched via `uvx`.
+- To run the HTTP transport instead:
+  - `python server.py --transport streamable-http --port 9000`
 
 2. **Test with the Client**:
    python client.py
@@ -94,6 +96,10 @@ You can run the server directly from git with uvx:
 Set the ComfyUI URL via environment variable (recommended):
 
   COMFY_URL=http://thor:8188 uvx --from git+https://github.com/venetanji/comfyui-mcp-server@main comfyui-mcp-server
+
+By default this runs the MCP server over **stdio**. If you need the HTTP server instead:
+
+  MCP_TRANSPORT=streamable-http MCP_PORT=9000 COMFY_URL=http://thor:8188 uvx --from git+https://github.com/venetanji/comfyui-mcp-server@main comfyui-mcp-server
 
 Example launch config style:
 
