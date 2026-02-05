@@ -280,6 +280,19 @@ def _save_file_from_url(url: str, filename: str, output_folder: Path) -> str:
         output_folder.mkdir(parents=True, exist_ok=True)
         output_path = output_folder / filename
         
+        # Add a cache-busting query parameter to avoid stale/duplicated content
+        # from intermediate caches or the ComfyUI view endpoint.
+        try:
+            from urllib.parse import urlparse, urlencode, urlunparse, parse_qsl
+            parts = urlparse(url)
+            q = dict(parse_qsl(parts.query))
+            q["_"] = str(int(time.time() * 1000))
+            new_query = urlencode(q)
+            url = urlunparse((parts.scheme, parts.netloc, parts.path, parts.params, new_query, parts.fragment))
+        except Exception:
+            # If URL parsing fails, fall back to the original URL
+            pass
+
         response = requests.get(url, timeout=30)
         if response.status_code != 200:
             raise Exception(f"Failed to download file: {response.status_code}")
@@ -395,7 +408,14 @@ def _register_workflow_tool(definition: WorkflowToolDefinition):
                     continue
                 filename = asset.get("filename", "")
                 # asset may contain a per-asset URL key or the top-level result may have it
-                asset_url = asset.get("asset_url") or asset.get("url") or result.get("asset_url") or result.get("url") or ""
+                # Prefer a per-asset URL if provided; otherwise, build one
+                asset_url = asset.get("asset_url") or asset.get("url") or ""
+                if not asset_url and filename:
+                    # Build a direct view URL for this filename using the comfyui client
+                    try:
+                        asset_url = comfyui_client.build_asset_url(filename, asset.get("subfolder", ""), asset.get("type", "output"))
+                    except Exception:
+                        asset_url = result.get("asset_url") or result.get("url") or ""
                 mime_type = comfyui_client.guess_mime_type(filename)
                 kind = "image" if mime_type.startswith("image/") else "audio"
 
