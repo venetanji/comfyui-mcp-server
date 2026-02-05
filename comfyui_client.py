@@ -3,7 +3,7 @@ import json
 import time
 import logging
 from pathlib import Path
-from typing import Any, Dict, Sequence
+from typing import Any, Dict, Sequence, List
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("ComfyUIClient")
@@ -79,14 +79,87 @@ class ComfyUIClient:
         prompt_id = self._queue_workflow(workflow)
         entry = self._wait_for_prompt(prompt_id, max_attempts=max_attempts)
         outputs = entry.get("outputs", {}) if isinstance(entry, dict) else entry
-        asset = self._extract_first_asset(entry, preferred_output_keys)
-        asset_url = self._build_asset_url(asset)
+        # Collect all matching assets (not just the first) so callers can handle
+        # workflows that produce multiple files (images/audio/etc.). Keep
+        # backward-compatible keys `asset` and `asset_url` for the first asset.
+        assets = self._extract_assets(entry, preferred_output_keys)
+        first_asset = assets[0] if assets else None
+        asset_url = self._build_asset_url(first_asset) if first_asset else None
         return {
             "asset_url": asset_url,
-            "asset": asset,
+            "asset": first_asset,
+            "assets": assets,
             "prompt_id": prompt_id,
-            "raw_outputs": entry
+            "raw_outputs": entry,
         }
+
+    def _extract_assets(self, payload: Dict[str, Any], preferred_output_keys: Sequence[str]) -> List[Dict[str, Any]]:
+        outputs = payload.get("outputs", payload) if isinstance(payload, dict) else payload
+        if not isinstance(outputs, dict):
+            outputs = {}
+        found: List[Dict[str, Any]] = []
+
+        # Helper to deep-search lists/dicts for dicts that look like assets
+        def collect_from_obj(obj: Any):
+            if isinstance(obj, dict):
+                if "filename" in obj:
+                    found.append(obj)
+                    return
+                for child in obj.values():
+                    collect_from_obj(child)
+            elif isinstance(obj, list):
+                for child in obj:
+                    collect_from_obj(child)
+
+        # First pass: collect assets from preferred output keys in each node
+        for node_output in outputs.values():
+            if not isinstance(node_output, dict):
+                continue
+            for key in preferred_output_keys:
+                assets = node_output.get(key)
+                if isinstance(assets, list):
+                    for asset in assets:
+                        if isinstance(asset, dict) and "filename" in asset:
+                            found.append(asset)
+                elif isinstance(assets, dict) and "filename" in assets:
+                    found.append(assets)
+
+            # UI blocks sometimes contain lists with asset dicts
+            ui_block = node_output.get("ui")
+            if isinstance(ui_block, dict):
+                for ui_value in ui_block.values():
+                    if isinstance(ui_value, list) and ui_value:
+                        for item in ui_value:
+                            if isinstance(item, dict) and "filename" in item:
+                                found.append(item)
+
+        # Second pass: collect any list/dict entries that include a filename
+        for node_output in outputs.values():
+            if isinstance(node_output, dict):
+                for value in node_output.values():
+                    if isinstance(value, list) and value:
+                        first = value[0]
+                        if isinstance(first, dict) and "filename" in first:
+                            # Add all items in the list that look like assets
+                            for item in value:
+                                if isinstance(item, dict) and "filename" in item:
+                                    found.append(item)
+
+        # Deep fallback: search entire payload for dicts with filename
+        collect_from_obj(payload)
+
+        # Deduplicate by (filename, subfolder, type) to avoid repeats while
+        # preserving order
+        unique: List[Dict[str, Any]] = []
+        seen_keys = set()
+        for a in found:
+            key = (a.get("filename"), a.get("subfolder"), a.get("type"))
+            if key in seen_keys:
+                continue
+            seen_keys.add(key)
+            unique.append(a)
+
+        return unique
 
     def _queue_workflow(self, workflow: Dict[str, Any]):
         logger.info("Submitting workflow to ComfyUI...")
