@@ -378,7 +378,7 @@
   },
   "47": {
     "inputs": {
-      "sage_attention": "sageattn_qk_int8_pv_fp16_triton",
+      "sage_attention": "auto",
       "allow_compile": true,
       "model": [
         "46",
